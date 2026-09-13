@@ -1,0 +1,60 @@
+Build Tasks — CloseWatch
+Companion to product-spec.md. Read that first for the what/why; this file is the how, broken into ordered, checkable tasks. Do not deviate from product-spec.md's scope (Section 5, Non-goals) while executing these tasks — no live execution, no wallet integration, no ticker list beyond what's specified.
+0. Environment setup
+Language/runtime: Python 3.11+
+Core dependencies: fastapi, uvicorn, pandas, yfinance, requests, python-dotenv, apscheduler (for scheduled jobs), sqlite3 (built-in — use SQLite for the hackathon build, no need for Postgres)
+Dashboard dependency: streamlit (fastest path to a working UI in the time available) — only switch to a separate React frontend if there's spare time after the MVP works end-to-end.
+Secrets/config (.env file, never commit):
+COINGECKO_API_KEY — only needed if using a paid tier; free tier works without a key for basic price endpoints, confirm at build time
+ALPHAVANTAGE_API_KEY — required, free tier signup at alphavantage.co
+No exchange API keys needed for MVP (no live order-book requirement in v1)
+1. Repo structure (suggested)
+Code
+2. Ordered tasks with acceptance criteria
+Task 1 — Ticker shortlist
+Pull current tokenized-equity volume rankings (CoinGecko/CoinMarketCap category page) and select 5–8 tickers per product-spec.md Section 6.
+Done when: a hardcoded or config-driven list of tickers exists, each mapped to its underlying stock symbol and primary exchange (e.g. TSLAx → TSLA → NASDAQ).
+Task 2 — Market calendar module
+Implement a function is_market_closed(exchange, timestamp) -> bool that accounts for daily hours (e.g. 9:30–16:00 ET for NASDAQ/NYSE) and known market holidays.
+Done when: unit tests pass for at least: a weekday during hours (False), a weekday after hours (True), a Saturday (True), a known market holiday (True).
+Task 3 — Data ingestion
+ingest_token_prices.py: pull historical token price data at hourly resolution for each ticker; store in token_prices.
+ingest_real_closes.py: pull daily close price for each underlying stock via yfinance; store in real_closes.
+Done when: running both scripts populates the DB with at least 3 months of historical data (or the maximum available if the token has traded less than 3 months) for every ticker in scope.
+Task 4 — Closure window construction
+Using the market calendar module, derive closure_windows from the raw price history: every period where is_market_closed is True, bounded by the last real close before it and the real reopen price after it.
+Done when: for a sample ticker, the generated closure windows visibly match known weekends/holidays in that period (spot-check manually against a calendar).
+Task 5 — Gap computation
+For each closure window, compute gap_pct at sampled points using the token price during that window, per product-spec.md Section 7.2.
+Done when: gap_observations table is populated for all historical closure windows across all tickers in scope.
+Task 6 — Calibration engine
+Bucket historical gaps per product-spec.md Section 7.3; compute convergence rate, avg time-to-converge, and worst-case tail stat per bucket.
+Done when: calibration_buckets table has a row per bucket (per ticker or pooled — decide based on sample size; if any single ticker has too few historical closures for a bucket, pool across tickers rather than showing an unreliable per-ticker stat) with non-null stats and a sample_size field.
+Reject if: any bucket stat is presented with a sample size under ~10 without a visible caveat — flag low-confidence buckets in the data rather than hiding the small sample size.
+Task 7 — Live closure + gap detector
+Endpoint or function that, given "now," returns per ticker whether the real market is closed and, if so, the current gap_pct vs. last real close.
+Done when: manually running this during a known closed period (e.g. a weekend) returns a non-null gap for at least one ticker.
+Task 8 — Prediction logging
+When the live detector flags a gap, write a row to prediction_log (status: pending). Once the closure ends and the follow-window (Section 7.3) elapses, resolve the prediction (converged / not_converged) and update the row.
+Done when: at least one full cycle (flag → resolve) has been demonstrated, either live or by replaying historical data as if it were live.
+Task 9 — Recalibration job
+Scheduled job (daily) that recomputes calibration_buckets incorporating newly resolved prediction_log rows.
+Done when: running the job after adding new resolved predictions changes the bucket stats (even slightly) and updates last_updated.
+Task 10 — API layer
+Implement all endpoints listed in product-spec.md Section 12 in api/main.py.
+Done when: each endpoint returns valid JSON matching its described purpose, tested via /docs (FastAPI's auto-generated Swagger UI) or curl.
+Task 11 — Dashboard
+Build the per-ticker cards and summary screen per product-spec.md Section 13, reading from the API layer (not directly from the DB, to keep the API as the single source of truth).
+Done when: for at least 2–3 tickers, the dashboard shows live status, current gap (if closed), historical odds for that gap's bucket, and the worst-case tail stat.
+Task 12 — Demo case + accuracy summary
+Identify one real historical closure window with a clear gap and outcome; prepare to show it end-to-end in the demo.
+Ensure the "model accuracy" summary panel (Section 13) shows a real, non-zero number from actual logged predictions — not a placeholder.
+Done when: a scripted walkthrough exists that shows the historical case and the live accuracy panel together.
+3. Definition of done (MVP)
+[ ] 5–8 tickers tracked with at least 3 months of historical data each (or max available)
+[ ] Calibration buckets computed with visible sample sizes
+[ ] Live gap detection works for at least one currently-closed ticker at demo time
+[ ] Prediction log has at least one resolved cycle, ideally several
+[ ] Dashboard shows current gap, historical odds, and worst-case tail stat per ticker
+[ ] Accuracy summary panel shows a real number
+[ ] No code path anywhere places an order, connects a wallet, or gives direct buy/sell instructions
