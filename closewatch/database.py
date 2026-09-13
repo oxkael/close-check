@@ -7,11 +7,22 @@ from typing import Optional
 class Database:
     def __init__(self, db_path: str = "closewatch.db"):
         self.db_path = db_path
-        self._conn = sqlite3.connect(self.db_path)
+        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
 
     def _connect(self) -> sqlite3.Connection:
         return self._conn
+
+    def close(self) -> None:
+        if getattr(self, "_conn", None) is not None:
+            self._conn.close()
+            self._conn = None
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def _ensure_schema(self) -> None:
         with self._connect() as conn:
