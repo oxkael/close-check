@@ -6,7 +6,8 @@ from closewatch.ingestion import get_ticker_catalog
 try:
     import yfinance as yf
 except ImportError as exc:  # pragma: no cover - only for local script use
-    raise SystemExit("yfinance is required to ingest real closes. Install the project dependencies first.") from exc
+    raise SystemExit(
+        "yfinance is required to ingest real closes. Install the project dependencies first.") from exc
 
 
 def main() -> None:
@@ -17,7 +18,8 @@ def main() -> None:
         ticker = yf.Ticker(config["base_symbol"])
         history = ticker.history(period="3mo", interval="1d")
         for timestamp, row in history.iterrows():
-            db.insert_real_close(config["base_symbol"], timestamp.strftime("%Y-%m-%d"), float(row["Close"]))
+            db.insert_real_close(config["base_symbol"], timestamp.strftime(
+                "%Y-%m-%d"), float(row["Close"]))
 
     print("Real close ingestion complete.")
 

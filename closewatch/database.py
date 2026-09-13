@@ -136,7 +136,8 @@ class Database:
                     symbol, window_start, window_end, last_real_close, reopen_price
                 ) VALUES (?, ?, ?, ?, ?)
                 """,
-                (symbol.upper(), window_start, window_end, last_real_close, reopen_price),
+                (symbol.upper(), window_start, window_end,
+                 last_real_close, reopen_price),
             )
 
     def log_prediction(
@@ -158,3 +159,43 @@ class Database:
                 (symbol.upper(), created_at, status, gap_pct, resolved_at, result),
             )
             return int(cursor.lastrowid)
+
+    def resolve_prediction(
+        self,
+        prediction_id: int,
+        resolved_at: Optional[str] = None,
+        result: Optional[str] = None,
+    ) -> None:
+        self._ensure_schema()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE prediction_log
+                SET status = 'resolved', resolved_at = ?, result = ?
+                WHERE id = ?
+                """,
+                (resolved_at, result, prediction_id),
+            )
+
+    def get_prediction(self, prediction_id: int) -> Optional[dict]:
+        self._ensure_schema()
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT *
+                FROM prediction_log
+                WHERE id = ?
+                """,
+                (prediction_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            return {
+                "id": int(row["id"]),
+                "symbol": row["symbol"],
+                "created_at": row["created_at"],
+                "status": row["status"],
+                "gap_pct": row["gap_pct"],
+                "resolved_at": row["resolved_at"],
+                "result": row["result"],
+            }

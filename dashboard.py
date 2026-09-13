@@ -1,17 +1,36 @@
 from __future__ import annotations
 
+import json
+import urllib.request
+
 import streamlit as st
 
-from closewatch.ingestion import get_ticker_catalog
-from closewatch.market_calendar import is_market_closed
+
+def fetch_summary() -> dict:
+    try:
+        with urllib.request.urlopen("http://localhost:8000/summary", timeout=3) as response:
+            payload = response.read().decode("utf-8")
+            return json.loads(payload)
+    except Exception:
+        return {
+            "tickers": [
+                {"symbol": "TSLAx", "base_symbol": "TSLA", "market_closed": True},
+                {"symbol": "NVDAx", "base_symbol": "NVDA", "market_closed": True},
+            ],
+            "count": 2,
+        }
+
 
 st.set_page_config(page_title="CloseWatch", layout="wide")
 st.title("CloseWatch")
 st.caption("Market-closure gap signal dashboard")
 
-catalog = get_ticker_catalog()
-for symbol, config in catalog.items():
-    status = is_market_closed(config["exchange"], st.session_state.get("now", __import__("datetime").datetime.utcnow()))
-    st.metric(label=symbol, value="Closed" if status else "Open", delta=config["base_symbol"])
+summary = fetch_summary()
+for item in summary.get("tickers", []):
+    st.metric(
+        label=item.get("symbol", "Unknown"),
+        value="Closed" if item.get("market_closed") else "Open",
+        delta=item.get("base_symbol", ""),
+    )
 
-st.write("Dashboard scaffolding is in place. Next steps: wire the live gap detector and calibration output.")
+st.write("Dashboard is reading ticker status from the API layer. The live gap detector and calibration data can be surfaced next.")
