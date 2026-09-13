@@ -53,7 +53,8 @@ def create_app() -> FastAPI:
     def ticker_status(symbol: str) -> dict[str, object]:
         catalog = get_ticker_catalog()
         normalized_symbol = _normalize_token_symbol(symbol)
-        config = next((cfg for key, cfg in catalog.items() if _normalize_token_symbol(key) == normalized_symbol), None)
+        config = next((cfg for key, cfg in catalog.items(
+        ) if _normalize_token_symbol(key) == normalized_symbol), None)
         if config is None:
             raise HTTPException(status_code=404, detail="Ticker not found")
 
@@ -90,7 +91,8 @@ def create_app() -> FastAPI:
     def ticker_signal(symbol: str) -> dict[str, object]:
         catalog = get_ticker_catalog()
         normalized_symbol = _normalize_token_symbol(symbol)
-        config = next((cfg for key, cfg in catalog.items() if _normalize_token_symbol(key) == normalized_symbol), None)
+        config = next((cfg for key, cfg in catalog.items(
+        ) if _normalize_token_symbol(key) == normalized_symbol), None)
         if config is None:
             raise HTTPException(status_code=404, detail="Ticker not found")
 
@@ -103,7 +105,8 @@ def create_app() -> FastAPI:
             token_price = float(latest_price["price"])
 
         if last_close is None:
-            last_close, token_price = _fallback_signal_inputs(normalized_symbol)
+            last_close, token_price = _fallback_signal_inputs(
+                normalized_symbol)
 
         gap_signal = current_gap_signal(
             symbol=normalized_symbol,
@@ -112,6 +115,22 @@ def create_app() -> FastAPI:
             exchange=config["exchange"],
             market_closed=closed,
         )
+        if not closed:
+            db.resolve_pending_predictions(
+                symbol=normalized_symbol,
+                last_real_close=float(last_close),
+                reopen_price=float(token_price),
+                resolved_at=now.isoformat(),
+            )
+
+        db.log_prediction(
+            symbol=normalized_symbol,
+            created_at=now.isoformat(),
+            status="pending",
+            gap_pct=float(gap_signal["gap_pct"]),
+        )
+        gap_signal["accuracy_summary"] = db.get_accuracy_summary(
+            normalized_symbol)
         return gap_signal
 
     return app

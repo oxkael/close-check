@@ -188,6 +188,54 @@ class Database:
                 (resolved_at, result, prediction_id),
             )
 
+    def resolve_pending_predictions(
+        self,
+        symbol: str,
+        last_real_close: float,
+        reopen_price: float,
+        resolved_at: Optional[str] = None,
+    ) -> list[int]:
+        self._ensure_schema()
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM prediction_log
+                WHERE symbol = ? AND status = 'pending'
+                ORDER BY created_at ASC
+                """,
+                (symbol.upper(),),
+            ).fetchall()
+
+            resolved_ids: list[int] = []
+            for row in rows:
+                original_gap = float(
+                    row["gap_pct"]) if row["gap_pct"] is not None else 0.0
+                if last_real_close == 0:
+                    reopen_gap = 0.0
+                else:
+                    reopen_gap = (
+                        (reopen_price - last_real_close) / last_real_close) * 100.0
+
+                if abs(original_gap) <= 1e-9:
+                    result = "converged"
+                elif abs(reopen_gap) <= abs(original_gap) * 0.75 and abs(reopen_gap) < abs(original_gap):
+                    result = "converged"
+                else:
+                    result = "failed"
+
+                conn.execute(
+                    """
+                    UPDATE prediction_log
+                    SET status = 'resolved', resolved_at = ?, result = ?
+                    WHERE id = ?
+                    """,
+                    (resolved_at, result, int(row["id"])),
+                )
+                resolved_ids.append(int(row["id"]))
+
+            return resolved_ids
+
     def get_prediction(self, prediction_id: int) -> Optional[dict]:
         self._ensure_schema()
         with self._connect() as conn:
@@ -210,3 +258,31 @@ class Database:
                 "resolved_at": row["resolved_at"],
                 "result": row["result"],
             }
+
+    def get_accuracy_summary(self, symbol: Optional[str] = None) -> dict:
+        self._ensure_schema()
+        with self._connect() as conn:
+            query = """
+                SELECT result
+                FROM prediction_log
+                WHERE status = 'resolved'
+            """
+            params: list[str] = []
+            if symbol is not None:
+                query += " AND symbol = ?"
+                params.append(symbol.upper())
+
+            rows = conn.execute(query, params).fetchall()
+
+        resolved_predictions = len(rows)
+        converged = sum(
+            1 for row in rows if str(row["result"]).lower() == "converged"
+        )
+        accuracy_pct = (converged / resolved_predictions *
+                        100.0) if resolved_predictions else 0.0
+
+        return {
+            "resolved_predictions": resolved_predictions,
+            "converged": converged,
+            "accuracy_pct": float(accuracy_pct),
+        }
