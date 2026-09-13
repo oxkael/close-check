@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import UTC, datetime
 from typing import Optional
+
+from .calibration import build_calibration_buckets
 
 
 class Database:
@@ -68,6 +71,20 @@ class Database:
                     gap_pct REAL,
                     resolved_at TEXT,
                     result TEXT
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS calibration_buckets (
+                    bucket TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    sample_size INTEGER NOT NULL,
+                    convergence_rate REAL NOT NULL,
+                    avg_time_to_converge_hours REAL,
+                    worst_case_gap_pct REAL,
+                    last_updated TEXT NOT NULL,
+                    PRIMARY KEY (bucket, symbol)
                 )
                 """
             )
@@ -286,3 +303,141 @@ class Database:
             "converged": converged,
             "accuracy_pct": float(accuracy_pct),
         }
+
+    def _hours_to_converge(
+        self,
+        created_at: Optional[str],
+        resolved_at: Optional[str],
+    ) -> Optional[float]:
+        if not created_at or not resolved_at:
+            return None
+        try:
+            start = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            end = datetime.fromisoformat(resolved_at.replace("Z", "+00:00"))
+            return (end - start).total_seconds() / 3600.0
+        except ValueError:
+            return None
+
+    def recompute_calibration_buckets(
+        self,
+        symbol: Optional[str] = None,
+        width: float = 2.0,
+    ) -> list[dict]:
+        self._ensure_schema()
+        with self._connect() as conn:
+            query = """
+                SELECT symbol, gap_pct, result, created_at, resolved_at
+                FROM prediction_log
+                WHERE status = 'resolved'
+            """
+            params: list[str] = []
+            if symbol is not None:
+                query += " AND symbol = ?"
+                params.append(symbol.upper())
+
+            query += " ORDER BY created_at ASC"
+            rows = conn.execute(query, params).fetchall()
+
+        observations: list[dict] = []
+        for row in rows:
+            gap_pct = row["gap_pct"]
+            if gap_pct is None:
+                continue
+            observations.append(
+                {
+                    "gap_pct": float(gap_pct),
+                    "converged": str(row["result"]).lower() == "converged",
+                    "hours_to_converge": self._hours_to_converge(
+                        row["created_at"], row["resolved_at"]
+                    ),
+                    "worst_case_gap_pct": abs(float(gap_pct)),
+                }
+            )
+
+        buckets = build_calibration_buckets(observations, width=width)
+        symbol_key = symbol.upper() if symbol is not None else "ALL"
+
+        with self._connect() as conn:
+            if symbol is not None:
+                conn.execute(
+                    "DELETE FROM calibration_buckets WHERE symbol = ?",
+                    (symbol_key,),
+                )
+            else:
+                conn.execute("DELETE FROM calibration_buckets")
+
+            for bucket in buckets:
+                conn.execute(
+                    """
+                    INSERT INTO calibration_buckets (
+                        bucket, symbol, sample_size, convergence_rate,
+                        avg_time_to_converge_hours, worst_case_gap_pct, last_updated
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        bucket["bucket"],
+                        symbol_key,
+                        int(bucket["sample_size"]),
+                        float(bucket["convergence_rate"]),
+                        bucket["avg_time_to_converge_hours"],
+                        bucket["worst_case_gap_pct"],
+                        datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+                    ),
+                )
+
+        return buckets
+
+    def get_calibration_buckets(self, symbol: Optional[str] = None) -> list[dict]:
+        self._ensure_schema()
+        with self._connect() as conn:
+            query = "SELECT * FROM calibration_buckets"
+            params: list[str] = []
+            if symbol is not None:
+                query += " WHERE symbol = ?"
+                params.append(symbol.upper())
+            query += " ORDER BY bucket ASC"
+            rows = conn.execute(query, params).fetchall()
+
+        return [
+            {
+                "bucket": row["bucket"],
+                "symbol": row["symbol"],
+                "sample_size": int(row["sample_size"]),
+                "convergence_rate": float(row["convergence_rate"]),
+                "avg_time_to_converge_hours": row["avg_time_to_converge_hours"],
+                "worst_case_gap_pct": row["worst_case_gap_pct"],
+                "last_updated": row["last_updated"],
+            }
+            for row in rows
+        ]
+
+    def get_bucket_stats(
+        self,
+        symbol: Optional[str] = None,
+        bucket: Optional[str] = None,
+    ) -> list[dict]:
+        self._ensure_schema()
+        with self._connect() as conn:
+            query = "SELECT * FROM calibration_buckets WHERE 1 = 1"
+            params: list[str] = []
+            if symbol is not None:
+                query += " AND symbol = ?"
+                params.append(symbol.upper())
+            if bucket is not None:
+                query += " AND bucket = ?"
+                params.append(bucket)
+            query += " ORDER BY bucket ASC"
+            rows = conn.execute(query, params).fetchall()
+
+        return [
+            {
+                "bucket": row["bucket"],
+                "symbol": row["symbol"],
+                "sample_size": int(row["sample_size"]),
+                "convergence_rate": float(row["convergence_rate"]),
+                "avg_time_to_converge_hours": row["avg_time_to_converge_hours"],
+                "worst_case_gap_pct": row["worst_case_gap_pct"],
+                "last_updated": row["last_updated"],
+            }
+            for row in rows
+        ]

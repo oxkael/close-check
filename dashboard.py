@@ -15,7 +15,10 @@ def fetch_json(url: str) -> dict[str, Any]:
 
 def fetch_summary() -> dict[str, Any]:
     try:
-        return fetch_json("http://localhost:8000/summary")
+        payload = fetch_json("http://localhost:8000/summary")
+        if "accuracy_summary" not in payload:
+            payload["accuracy_summary"] = {"resolved_predictions": 0, "converged": 0, "accuracy_pct": 0.0}
+        return payload
     except Exception:
         return {
             "tickers": [
@@ -24,6 +27,7 @@ def fetch_summary() -> dict[str, Any]:
                 {"symbol": "AAPLx", "base_symbol": "AAPL", "market_closed": True},
             ],
             "count": 3,
+            "accuracy_summary": {"resolved_predictions": 0, "converged": 0, "accuracy_pct": 0.0},
         }
 
 
@@ -52,7 +56,18 @@ st.title("CloseWatch")
 st.caption("Market-closure gap signal dashboard")
 
 summary = fetch_summary()
+accuracy_summary = summary.get("accuracy_summary", {"resolved_predictions": 0, "converged": 0, "accuracy_pct": 0.0})
 ticker_items = summary.get("tickers", [])
+
+st.subheader("Model Accuracy")
+st.metric(
+    "Resolved predictions",
+    int(accuracy_summary.get("resolved_predictions", 0)),
+)
+st.metric(
+    "Accuracy",
+    f"{float(accuracy_summary.get('accuracy_pct', 0.0)):.1f}%",
+)
 
 if not ticker_items:
     st.info("No ticker metadata is available yet. The app is waiting for its source feed.")
@@ -65,6 +80,9 @@ for symbol in [item.get("symbol") for item in ticker_items if item.get("symbol")
     accuracy = signal.get("accuracy_summary", {})
     resolved = accuracy.get("resolved_predictions", 0)
     accuracy_pct = float(accuracy.get("accuracy_pct", 0.0))
+    bucket_stats = signal.get("bucket_stats", {})
+    bucket_odds = float(bucket_stats.get("convergence_rate", 0.0) * 100.0 if bucket_stats else 0.0)
+    worst_case = bucket_stats.get("worst_case_gap_pct")
 
     with st.container():
         st.subheader(symbol)
@@ -77,6 +95,8 @@ for symbol in [item.get("symbol") for item in ticker_items if item.get("symbol")
             f"**Base:** {signal.get('exchange', 'N/A')}  \n"
             f"**Last real close:** {signal.get('last_real_close', 0.0):.2f}  \n"
             f"**Token price:** {signal.get('token_price', 0.0):.2f}  \n"
+            f"**Historical odds:** {bucket_odds:.1f}%  \n"
+            f"**Worst case:** {worst_case if worst_case is not None else 'N/A'}  \n"
             f"**Resolved predictions:** {resolved}"
         )
         st.divider()

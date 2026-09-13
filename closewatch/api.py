@@ -75,17 +75,39 @@ def create_app() -> FastAPI:
 
     @app.get("/summary")
     def summary() -> dict[str, object]:
-        items = []
-        for symbol, config in get_ticker_catalog().items():
-            now = datetime.now(timezone.utc)
-            items.append(
-                {
-                    "symbol": symbol,
-                    "market_closed": is_market_closed(config["exchange"], now),
-                    "base_symbol": config["base_symbol"],
-                }
-            )
-        return {"tickers": items, "count": len(items)}
+        items = [ticker_signal(symbol) for symbol in get_ticker_catalog()]
+        return {
+            "tickers": items,
+            "count": len(items),
+            "accuracy_summary": db.get_accuracy_summary(),
+        }
+
+    @app.get("/accuracy/summary")
+    def accuracy_summary() -> dict[str, object]:
+        return db.get_accuracy_summary()
+
+    @app.get("/ticker/{symbol}/calibration")
+    def ticker_calibration(symbol: str, bucket: str | None = None) -> dict[str, object]:
+        catalog = get_ticker_catalog()
+        normalized_symbol = _normalize_token_symbol(symbol)
+        config = next((cfg for key, cfg in catalog.items(
+        ) if _normalize_token_symbol(key) == normalized_symbol), None)
+        if config is None:
+            raise HTTPException(status_code=404, detail="Ticker not found")
+
+        buckets = db.get_bucket_stats(normalized_symbol, bucket=bucket)
+        return {
+            "symbol": normalized_symbol,
+            "base_symbol": config["base_symbol"],
+            "exchange": config["exchange"],
+            "bucket": bucket,
+            "buckets": buckets,
+        }
+
+    @app.post("/admin/recompute-calibration")
+    def recompute_calibration() -> dict[str, object]:
+        buckets = db.recompute_calibration_buckets()
+        return {"updated": True, "buckets": buckets}
 
     @app.get("/ticker/{symbol}/signal")
     def ticker_signal(symbol: str) -> dict[str, object]:
@@ -129,6 +151,16 @@ def create_app() -> FastAPI:
             status="pending",
             gap_pct=float(gap_signal["gap_pct"]),
         )
+        bucket_stats = db.get_bucket_stats(normalized_symbol, gap_signal["bucket"])
+        gap_signal["bucket_stats"] = bucket_stats[0] if bucket_stats else {
+            "bucket": gap_signal["bucket"],
+            "symbol": normalized_symbol,
+            "sample_size": 0,
+            "convergence_rate": 0.0,
+            "avg_time_to_converge_hours": None,
+            "worst_case_gap_pct": None,
+            "last_updated": None,
+        }
         gap_signal["accuracy_summary"] = db.get_accuracy_summary(
             normalized_symbol)
         return gap_signal
