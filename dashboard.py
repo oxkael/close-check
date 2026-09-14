@@ -17,7 +17,8 @@ def fetch_summary() -> dict[str, Any]:
     try:
         payload = fetch_json("http://localhost:8000/summary")
         if "accuracy_summary" not in payload:
-            payload["accuracy_summary"] = {"resolved_predictions": 0, "converged": 0, "accuracy_pct": 0.0}
+            payload["accuracy_summary"] = {
+                "resolved_predictions": 0, "converged": 0, "accuracy_pct": 0.0}
         return payload
     except Exception:
         return {
@@ -36,7 +37,8 @@ def fetch_signal(symbol: str) -> dict[str, Any]:
     try:
         payload = fetch_json(url)
         if "accuracy_summary" not in payload:
-            payload["accuracy_summary"] = {"resolved_predictions": 0, "converged": 0, "accuracy_pct": 0.0}
+            payload["accuracy_summary"] = {
+                "resolved_predictions": 0, "converged": 0, "accuracy_pct": 0.0}
         return payload
     except Exception:
         return {
@@ -56,7 +58,8 @@ st.title("CloseWatch")
 st.caption("Market-closure gap signal dashboard")
 
 summary = fetch_summary()
-accuracy_summary = summary.get("accuracy_summary", {"resolved_predictions": 0, "converged": 0, "accuracy_pct": 0.0})
+accuracy_summary = summary.get("accuracy_summary", {
+                               "resolved_predictions": 0, "converged": 0, "accuracy_pct": 0.0})
 ticker_items = summary.get("tickers", [])
 
 st.subheader("Model Accuracy")
@@ -70,7 +73,8 @@ st.metric(
 )
 
 if not ticker_items:
-    st.info("No ticker metadata is available yet. The app is waiting for its source feed.")
+    st.info(
+        "No ticker metadata is available yet. The app is waiting for its source feed.")
     st.stop()
 
 for symbol in [item.get("symbol") for item in ticker_items if item.get("symbol")]:
@@ -81,7 +85,8 @@ for symbol in [item.get("symbol") for item in ticker_items if item.get("symbol")
     resolved = accuracy.get("resolved_predictions", 0)
     accuracy_pct = float(accuracy.get("accuracy_pct", 0.0))
     bucket_stats = signal.get("bucket_stats", {})
-    bucket_odds = float(bucket_stats.get("convergence_rate", 0.0) * 100.0 if bucket_stats else 0.0)
+    bucket_odds = float(bucket_stats.get(
+        "convergence_rate", 0.0) * 100.0 if bucket_stats else 0.0)
     worst_case = bucket_stats.get("worst_case_gap_pct")
 
     with st.container():

@@ -151,7 +151,8 @@ def create_app() -> FastAPI:
             status="pending",
             gap_pct=float(gap_signal["gap_pct"]),
         )
-        bucket_stats = db.get_bucket_stats(normalized_symbol, gap_signal["bucket"])
+        bucket_stats = db.get_bucket_stats(
+            normalized_symbol, gap_signal["bucket"])
         gap_signal["bucket_stats"] = bucket_stats[0] if bucket_stats else {
             "bucket": gap_signal["bucket"],
             "symbol": normalized_symbol,

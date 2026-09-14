@@ -381,7 +381,8 @@ class Database:
                         float(bucket["convergence_rate"]),
                         bucket["avg_time_to_converge_hours"],
                         bucket["worst_case_gap_pct"],
-                        datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+                        datetime.now(UTC).isoformat(
+                            timespec="seconds").replace("+00:00", "Z"),
                     ),
                 )
 
