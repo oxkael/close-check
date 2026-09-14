@@ -3,24 +3,24 @@ Companion to product-spec.md. Read that first for the what/why; this file is the
 0. Environment setup
 Language/runtime: Python 3.11+
 Core dependencies: fastapi, uvicorn, pandas, yfinance, requests, python-dotenv, apscheduler (for scheduled jobs), sqlite3 (built-in — use SQLite for the hackathon build, no need for Postgres)
-Dashboard dependency: streamlit (fastest path to a working UI in the time available) — only switch to a separate React frontend if there's spare time after the MVP works end-to-end.
+Dashboard dependency: streamlit — superseded. Frontend is now a separate Next.js/React/TypeScript/Tailwind build — see frontend-spec-revised.md for the actual UI spec and its own setup (Node.js/npm).
 Secrets/config (.env file, never commit):
-COINGECKO_API_KEY — only needed if using a paid tier; free tier works without a key for basic price endpoints, confirm at build time
-ALPHAVANTAGE_API_KEY — required, free tier signup at alphavantage.co
-No exchange API keys needed for MVP (no live order-book requirement in v1)
+ALPHAVANTAGE_API_KEY — required for real stock close prices, free tier signup at alphavantage.co
+No key needed for Bitget's market data — confirmed via live testing, api.bitget.com/api/v3/market/tickers and /api/v3/market/candles are public, no auth required
+No exchange API keys needed for MVP (no live order-book requirement in v1 — Bitget's order-book endpoint requires BD/whitelist approval and isn't used)
 1. Repo structure (suggested)
 Code
 2. Ordered tasks with acceptance criteria
 Task 1 — Ticker shortlist
-Pull current tokenized-equity volume rankings (CoinGecko/CoinMarketCap category page) and select 5–8 tickers per product-spec.md Section 6.
-Done when: a hardcoded or config-driven list of tickers exists, each mapped to its underlying stock symbol and primary exchange (e.g. TSLAx → TSLA → NASDAQ).
+Select 5–8 tickers from the confirmed 93-ticker weekend-eligible rToken list in product-spec.md Section 6. Optionally cross-check current eligibility live via GET /api/v3/reality/market/stock-info (no auth) for the weekendTradable field, since Bitget adds tickers to this list periodically.
+Done when: a hardcoded or config-driven list of tickers exists, each mapped to its underlying stock symbol, its Bitget trading symbol, and primary exchange (e.g. rTSLA → RTSLAUSDT → TSLA → NASDAQ).
 Task 2 — Market calendar module
-Implement a function is_market_closed(exchange, timestamp) -> bool that accounts for daily hours (e.g. 9:30–16:00 ET for NASDAQ/NYSE) and known market holidays.
-Done when: unit tests pass for at least: a weekday during hours (False), a weekday after hours (True), a Saturday (True), a known market holiday (True).
+Implement a function is_market_closed(exchange, timestamp) -> bool. Pull session boundaries from Bitget's GET /api/v3/reality/market/states (confirmed: pre-market 04:00–09:30 ET, regular 09:30–16:00 ET, after-hours 16:00–20:00 ET, overnight 20:00–04:00 ET) and the holiday list from GET /api/v3/reality/market/calendar (both no-auth) rather than hardcoding or sourcing a calendar elsewhere. Cache both responses locally rather than calling on every check.
+Done when: unit tests pass for at least: a weekday during regular hours (False), a weekday after hours (True), a Saturday (True), a known market holiday from the calendar endpoint (True).
 Task 3 — Data ingestion
-ingest_token_prices.py: pull historical token price data at hourly resolution for each ticker; store in token_prices.
-ingest_real_closes.py: pull daily close price for each underlying stock via yfinance; store in real_closes.
-Done when: running both scripts populates the DB with at least 3 months of historical data (or the maximum available if the token has traded less than 3 months) for every ticker in scope.
+ingest_token_prices.py: pull historical token price data via Bitget's confirmed public candles endpoint — GET https://api.bitget.com/api/v3/market/candles?category=SPOT&symbol={SYMBOL}&interval=1h&limit=100 (param is interval, not granularity — confirmed by live test). No auth needed. Test a higher limit value at the start of this task to find the actual max historical depth available per call, since that number isn't yet confirmed — this determines how far back your calibration dataset can go. Store in token_prices.
+ingest_real_closes.py: pull daily close price for each underlying stock via yfinance; store in real_closes. Unchanged from original plan.
+Done when: running both scripts populates the DB with at least 3 months of historical data (or the maximum available from Bitget's API, whichever is less) for every ticker in scope.
 Task 4 — Closure window construction
 Using the market calendar module, derive closure_windows from the raw price history: every period where is_market_closed is True, bounded by the last real close before it and the real reopen price after it.
 Done when: for a sample ticker, the generated closure windows visibly match known weekends/holidays in that period (spot-check manually against a calendar).
@@ -44,7 +44,8 @@ Task 10 — API layer
 Implement all endpoints listed in product-spec.md Section 12 in api/main.py.
 Done when: each endpoint returns valid JSON matching its described purpose, tested via /docs (FastAPI's auto-generated Swagger UI) or curl.
 Task 11 — Dashboard
-Build the per-ticker cards and summary screen per product-spec.md Section 13, reading from the API layer (not directly from the DB, to keep the API as the single source of truth).
+Superseded — see frontend-spec-revised.md for the actual frontend spec. The dashboard is now a separate Next.js/React/TypeScript/Tailwind build (not Streamlit), with its own detailed design spec and implementation phases. This task entry stays only to preserve numbering; the acceptance criteria below still apply regardless of which frontend stack renders them.
+Build the per-ticker cards and summary screen, reading from the API layer (not directly from the DB, to keep the API as the single source of truth).
 Done when: for at least 2–3 tickers, the dashboard shows live status, current gap (if closed), historical odds for that gap's bucket, and the worst-case tail stat.
 Task 12 — Demo case + accuracy summary
 Identify one real historical closure window with a clear gap and outcome; prepare to show it end-to-end in the demo.
