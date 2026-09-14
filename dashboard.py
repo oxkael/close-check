@@ -1,3 +1,9 @@
+"""Temporary Streamlit MVP dashboard.
+
+This is a local prototype used while the product frontend is being upgraded to the
+revised React/Next.js/Tailwind build defined in frontend-spec-revised.md.
+"""
+
 from __future__ import annotations
 
 import json

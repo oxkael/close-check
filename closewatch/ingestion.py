@@ -5,12 +5,31 @@ from typing import Callable, Iterable
 from .database import Database
 
 TICKER_CATALOG = {
-    "TSLAx": {"base_symbol": "TSLA", "exchange": "NASDAQ"},
-    "NVDAx": {"base_symbol": "NVDA", "exchange": "NASDAQ"},
-    "AAPLx": {"base_symbol": "AAPL", "exchange": "NASDAQ"},
-    "MSFTx": {"base_symbol": "MSFT", "exchange": "NASDAQ"},
-    "AMZNx": {"base_symbol": "AMZN", "exchange": "NASDAQ"},
+    "rTSLA": {"base_symbol": "TSLA", "exchange": "NASDAQ", "bitget_symbol": "RTSLAUSDT"},
+    "rNVDA": {"base_symbol": "NVDA", "exchange": "NASDAQ", "bitget_symbol": "RNVDAUSDT"},
+    "rAAPL": {"base_symbol": "AAPL", "exchange": "NASDAQ", "bitget_symbol": "RAAPLUSDT"},
+    "rMSFT": {"base_symbol": "MSFT", "exchange": "NASDAQ", "bitget_symbol": "RMSFTUSDT"},
+    "rAMZN": {"base_symbol": "AMZN", "exchange": "NASDAQ", "bitget_symbol": "RAMZNUSDT"},
 }
+
+
+def canonicalize_ticker_symbol(symbol: str) -> str:
+    cleaned = symbol.strip().upper().replace(" ", "")
+    if cleaned.endswith("USDT"):
+        cleaned = cleaned[:-4]
+    if cleaned.startswith("R") and len(cleaned) > 1:
+        cleaned = cleaned[1:]
+    if cleaned.endswith("X"):
+        cleaned = cleaned[:-1]
+    return cleaned
+
+
+def resolve_ticker_key(symbol: str) -> str:
+    normalized = canonicalize_ticker_symbol(symbol)
+    for key in TICKER_CATALOG:
+        if canonicalize_ticker_symbol(key) == normalized:
+            return key
+    return symbol.strip()
 
 
 def get_ticker_catalog() -> dict[str, dict[str, str]]:
@@ -45,7 +64,8 @@ def ingest_recent_real_closes(
     summary: dict[str, int] = {}
     catalog = get_ticker_catalog()
     for token_symbol in symbols:
-        config = catalog.get(token_symbol)
+        token_key = resolve_ticker_key(token_symbol)
+        config = catalog.get(token_key)
         if config is None:
             normalized = token_symbol.strip().upper()
             config = next((cfg for key, cfg in catalog.items()

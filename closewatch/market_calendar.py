@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timezone
+from zoneinfo import ZoneInfo
 
 from .config import EXCHANGE_HOURS, MARKET_HOLIDAYS
 
 
 def _as_et(timestamp: datetime) -> datetime:
     if timestamp.tzinfo is None:
-        return timestamp
-    return timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+        return timestamp.replace(tzinfo=ZoneInfo("America/New_York"))
+    return timestamp.astimezone(ZoneInfo("America/New_York"))
 
 
 def _is_us_market_holiday(dt: date) -> bool:
@@ -34,7 +35,8 @@ def is_market_closed(exchange: str, timestamp: datetime) -> bool:
     market_open = time(open_hour, open_minute)
     market_close = time(close_hour, close_minute)
 
-    return not (market_open <= dt.timetz().replace(tzinfo=None) < market_close)
+    current_time = dt.timetz()
+    return not (market_open <= current_time < market_close)
 
 
 def is_market_open(exchange: str, timestamp: datetime) -> bool:

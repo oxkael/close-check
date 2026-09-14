@@ -5,27 +5,48 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException
 
 from .database import Database
-from .ingestion import get_ticker_catalog
+from .ingestion import canonicalize_ticker_symbol, get_ticker_catalog
 from .market_calendar import is_market_closed
 from .signal import current_gap_signal
 
 
 def _normalize_token_symbol(symbol: str) -> str:
-    cleaned = symbol.strip()
-    if cleaned.lower().endswith("x"):
-        return cleaned[:-1].upper() + "x"
-    return cleaned.upper()
+    cleaned = symbol.strip().upper().replace(" ", "")
+    if cleaned.endswith("USDT"):
+        cleaned = cleaned[:-4]
+    if cleaned.startswith("R") and len(cleaned) > 1:
+        cleaned = cleaned[1:]
+    if cleaned.endswith("X"):
+        return cleaned[:-1] + "x"
+    if cleaned in {"TSLA", "NVDA", "AAPL", "MSFT", "AMZN"}:
+        return f"{cleaned}x"
+    return cleaned
+
+
+def _lookup_ticker_config(symbol: str) -> tuple[str | None, dict[str, str] | None]:
+    catalog = get_ticker_catalog()
+    normalized_symbol = _normalize_token_symbol(symbol)
+    for key, config in catalog.items():
+        if _normalize_token_symbol(key) == normalized_symbol:
+            return key, config
+    return None, None
 
 
 def _fallback_signal_inputs(symbol: str) -> tuple[float, float]:
+    normalized = _normalize_token_symbol(symbol)
     fallback_map = {
         "TSLAx": (100.0, 104.0),
         "NVDAx": (120.0, 126.0),
         "AAPLx": (180.0, 184.0),
         "MSFTx": (310.0, 316.0),
         "AMZNx": (140.0, 145.0),
+        "rTSLA": (100.0, 104.0),
+        "rNVDA": (120.0, 126.0),
+        "rAAPL": (180.0, 184.0),
+        "rMSFT": (310.0, 316.0),
+        "rAMZN": (140.0, 145.0),
     }
-    return fallback_map.get(_normalize_token_symbol(symbol), (100.0, 104.0))
+    return fallback_map.get(normalized, (100.0, 104.0))
 
 
 def create_app() -> FastAPI:
@@ -51,10 +72,7 @@ def create_app() -> FastAPI:
 
     @app.get("/ticker/{symbol}/status")
     def ticker_status(symbol: str) -> dict[str, object]:
-        catalog = get_ticker_catalog()
-        normalized_symbol = _normalize_token_symbol(symbol)
-        config = next((cfg for key, cfg in catalog.items(
-        ) if _normalize_token_symbol(key) == normalized_symbol), None)
+        config_key, config = _lookup_ticker_config(symbol)
         if config is None:
             raise HTTPException(status_code=404, detail="Ticker not found")
 
@@ -65,7 +83,7 @@ def create_app() -> FastAPI:
             latest_close = _fallback_signal_inputs(symbol)[0]
 
         return {
-            "symbol": normalized_symbol,
+            "symbol": config_key or symbol.strip() or _normalize_token_symbol(symbol),
             "base_symbol": config["base_symbol"],
             "exchange": config["exchange"],
             "market_closed": is_closed,
@@ -88,16 +106,14 @@ def create_app() -> FastAPI:
 
     @app.get("/ticker/{symbol}/calibration")
     def ticker_calibration(symbol: str, bucket: str | None = None) -> dict[str, object]:
-        catalog = get_ticker_catalog()
-        normalized_symbol = _normalize_token_symbol(symbol)
-        config = next((cfg for key, cfg in catalog.items(
-        ) if _normalize_token_symbol(key) == normalized_symbol), None)
+        config_key, config = _lookup_ticker_config(symbol)
         if config is None:
             raise HTTPException(status_code=404, detail="Ticker not found")
 
-        buckets = db.get_bucket_stats(normalized_symbol, bucket=bucket)
+        resolved_symbol = config_key or _normalize_token_symbol(symbol)
+        buckets = db.get_bucket_stats(resolved_symbol, bucket=bucket)
         return {
-            "symbol": normalized_symbol,
+            "symbol": resolved_symbol,
             "base_symbol": config["base_symbol"],
             "exchange": config["exchange"],
             "bucket": bucket,
@@ -111,27 +127,26 @@ def create_app() -> FastAPI:
 
     @app.get("/ticker/{symbol}/signal")
     def ticker_signal(symbol: str) -> dict[str, object]:
-        catalog = get_ticker_catalog()
-        normalized_symbol = _normalize_token_symbol(symbol)
-        config = next((cfg for key, cfg in catalog.items(
-        ) if _normalize_token_symbol(key) == normalized_symbol), None)
+        config_key, config = _lookup_ticker_config(symbol)
         if config is None:
             raise HTTPException(status_code=404, detail="Ticker not found")
+
+        resolved_symbol = config_key or _normalize_token_symbol(symbol)
+        display_symbol = symbol.strip() if symbol.strip() else resolved_symbol
 
         now = datetime.now(timezone.utc)
         closed = is_market_closed(config["exchange"], now)
         last_close = db.get_latest_real_close(config["base_symbol"])
         token_price = 100.0
-        latest_price = db.get_latest_token_price(normalized_symbol)
+        latest_price = db.get_latest_token_price(resolved_symbol)
         if latest_price is not None:
             token_price = float(latest_price["price"])
 
         if last_close is None:
-            last_close, token_price = _fallback_signal_inputs(
-                normalized_symbol)
+            last_close, token_price = _fallback_signal_inputs(display_symbol)
 
         gap_signal = current_gap_signal(
-            symbol=normalized_symbol,
+            symbol=display_symbol,
             last_real_close=float(last_close),
             token_price=float(token_price),
             exchange=config["exchange"],
@@ -139,23 +154,23 @@ def create_app() -> FastAPI:
         )
         if not closed:
             db.resolve_pending_predictions(
-                symbol=normalized_symbol,
+                symbol=resolved_symbol,
                 last_real_close=float(last_close),
                 reopen_price=float(token_price),
                 resolved_at=now.isoformat(),
             )
 
         db.log_prediction(
-            symbol=normalized_symbol,
+            symbol=resolved_symbol,
             created_at=now.isoformat(),
             status="pending",
             gap_pct=float(gap_signal["gap_pct"]),
         )
         bucket_stats = db.get_bucket_stats(
-            normalized_symbol, gap_signal["bucket"])
+            resolved_symbol, gap_signal["bucket"])
         gap_signal["bucket_stats"] = bucket_stats[0] if bucket_stats else {
             "bucket": gap_signal["bucket"],
-            "symbol": normalized_symbol,
+            "symbol": resolved_symbol,
             "sample_size": 0,
             "convergence_rate": 0.0,
             "avg_time_to_converge_hours": None,
@@ -163,7 +178,7 @@ def create_app() -> FastAPI:
             "last_updated": None,
         }
         gap_signal["accuracy_summary"] = db.get_accuracy_summary(
-            normalized_symbol)
+            resolved_symbol)
         return gap_signal
 
     return app
