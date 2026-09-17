@@ -36,6 +36,60 @@ def get_ticker_catalog() -> dict[str, dict[str, str]]:
     return TICKER_CATALOG.copy()
 
 
+def ingest_token_prices_bitget(
+    db: Database | None = None,
+    symbols: Iterable[str] | None = None,
+    limit: int = 200,
+) -> dict[str, int]:
+    """Fetch token candles from Bitget and persist latest prices into token_prices.
+
+    Symbols should be provided in the rToken or legacy TSLAx form and mapped
+    via the ticker catalog to Bitget symbol names.
+    """
+    if db is None:
+        db = Database()
+    db.init_db()
+
+    if symbols is None:
+        symbols = list(get_ticker_catalog().keys())
+
+    from .bitget import fetch_candles
+
+    summary: dict[str, int] = {}
+    catalog = get_ticker_catalog()
+    for token_symbol in symbols:
+        token_key = resolve_ticker_key(token_symbol)
+        config = catalog.get(token_key)
+        if config is None:
+            continue
+        bitget_symbol = config.get("bitget_symbol")
+        if not bitget_symbol:
+            summary[token_symbol] = 0
+            continue
+
+        candles = fetch_candles(bitget_symbol, limit=limit)
+        inserted = 0
+        # Bitget returns arrays; the last available candle contains latest price
+        for c in candles[:1]:
+            try:
+                # Some APIs return [ts, open, high, low, close, volume]
+                close = float(c[4]) if isinstance(c, (list, tuple)) and len(c) > 4 else None
+            except Exception:
+                close = None
+            if close is None:
+                continue
+            # Use current UTC timestamp for token price row
+            import datetime
+
+            ts = datetime.datetime.utcnow().isoformat() + "Z"
+            db.insert_token_price(token_key, ts, float(close))
+            inserted += 1
+
+        summary[token_symbol] = inserted
+
+    return summary
+
+
 def ingest_recent_real_closes(
     db: Database | None = None,
     symbols: Iterable[str] | None = None,

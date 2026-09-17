@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 type AccuracySummary = {
   resolved_predictions: number;
@@ -77,9 +78,9 @@ export default function Home() {
   }, []);
 
   const topAccuracy = summary?.accuracy_summary ?? { resolved_predictions: 0, converged: 0, accuracy_pct: 0 };
-
+ 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100">
+    <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100" aria-busy={loading}>
       <div className="mx-auto max-w-7xl">
         <header className="mb-8 flex flex-col gap-4 border-b border-slate-800 pb-6 md:flex-row md:items-end md:justify-between">
           <div>
@@ -96,8 +97,25 @@ export default function Home() {
         </header>
 
         {loading ? (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-8 text-slate-300">
-            Loading live market signal data…
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+              <div className="mb-3">
+                <div className="h-3 w-32 animate-pulse bg-slate-700/30 rounded-md"></div>
+              </div>
+              <div className="h-8 w-20 animate-pulse bg-slate-700/30 rounded-md"></div>
+            </div>
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+              <div className="mb-3">
+                <div className="h-3 w-32 animate-pulse bg-slate-700/30 rounded-md"></div>
+              </div>
+              <div className="h-8 w-20 animate-pulse bg-slate-700/30 rounded-md"></div>
+            </div>
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+              <div className="mb-3">
+                <div className="h-3 w-32 animate-pulse bg-slate-700/30 rounded-md"></div>
+              </div>
+              <div className="h-8 w-20 animate-pulse bg-slate-700/30 rounded-md"></div>
+            </div>
           </div>
         ) : error ? (
           <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-8 text-rose-200">
@@ -124,78 +142,76 @@ export default function Home() {
               </div>
             </section>
 
-            <section className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
-              {summary.tickers.map((ticker) => {
+            <section className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3" aria-live="polite">
+              {summary.tickers.map((ticker, idx) => {
                 const bucketStats = ticker.bucket_stats;
                 const sampleSize = bucketStats?.sample_size ?? 0;
                 const lowConfidence = sampleSize < 10;
-
                 return (
-                  <article
-                    key={ticker.symbol}
-                    className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-950/20"
-                  >
-                    <div className="mb-5 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                          {ticker.exchange}
-                        </p>
-                        <h2 className="mt-1 text-2xl font-semibold text-white">{ticker.symbol}</h2>
+                  <Link key={ticker.symbol} href={`/ticker/${ticker.symbol}`} className="block">
+                    <article className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-950/20" role="article" aria-labelledby={`ticker-${idx}-title`}>
+                      <div className="mb-5 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                            {ticker.exchange}
+                          </p>
+                          <h2 id={`ticker-${idx}-title`} className="mt-1 text-2xl font-semibold text-white">{ticker.symbol}</h2>
+                        </div>
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-medium ${
+                            ticker.market_closed
+                              ? "bg-amber-500/15 text-amber-200 ring-1 ring-amber-500/40"
+                              : "bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/40"
+                          }`}
+                        >
+                          {ticker.market_closed ? "Closed" : "Open"}
+                        </span>
                       </div>
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-medium ${
-                          ticker.market_closed
-                            ? "bg-amber-500/15 text-amber-200 ring-1 ring-amber-500/40"
-                            : "bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/40"
-                        }`}
-                      >
-                        {ticker.market_closed ? "Closed" : "Open"}
-                      </span>
-                    </div>
 
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="rounded-xl bg-slate-800/80 p-3">
-                          <p className="text-xs text-slate-400">Last real close</p>
-                          <p className="mt-2 text-lg font-medium text-white">
-                            ${ticker.last_real_close.toFixed(2)}
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="rounded-xl bg-slate-800/80 p-3">
+                            <p className="text-xs text-slate-400">Last real close</p>
+                            <p className="mt-2 text-lg font-medium text-white">
+                              ${ticker.last_real_close.toFixed(2)}
+                            </p>
+                          </div>
+                          <div className="rounded-xl bg-slate-800/80 p-3">
+                            <p className="text-xs text-slate-400">Token price</p>
+                            <p className="mt-2 text-lg font-medium text-white">
+                              ${ticker.token_price.toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-700 bg-slate-800/70 p-3">
+                          <p className="text-xs text-slate-400">Current gap</p>
+                          <p className="mt-2 text-2xl font-semibold text-cyan-300">
+                            {formatPercent(ticker.gap_pct)}
                           </p>
                         </div>
-                        <div className="rounded-xl bg-slate-800/80 p-3">
-                          <p className="text-xs text-slate-400">Token price</p>
-                          <p className="mt-2 text-lg font-medium text-white">
-                            ${ticker.token_price.toFixed(2)}
+
+                        <div className="rounded-xl border border-slate-700 bg-slate-800/70 p-3">
+                          <p className="text-xs text-slate-400">Bucket</p>
+                          <p className="mt-2 text-lg font-medium text-white">{ticker.bucket}</p>
+                          <p className="mt-2 text-sm text-slate-300">
+                            Convergence rate: {bucketStats ? formatPercent(bucketStats.convergence_rate * 100) : "No data"}
                           </p>
+                          <p className="mt-1 text-sm text-slate-300">
+                            Avg time to converge: {bucketStats ? formatHours(bucketStats.avg_time_to_converge_hours) : "No data"}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-300">
+                            Worst-case tail: {bucketStats ? formatPercent(bucketStats.worst_case_gap_pct) : "No data"}
+                          </p>
+                          {lowConfidence ? (
+                            <p className="mt-2 text-xs text-amber-300">
+                              Low-confidence bucket: sample size {sampleSize} is below the 10-row confidence threshold.
+                            </p>
+                          ) : null}
                         </div>
                       </div>
-
-                      <div className="rounded-xl border border-slate-700 bg-slate-800/70 p-3">
-                        <p className="text-xs text-slate-400">Current gap</p>
-                        <p className="mt-2 text-2xl font-semibold text-cyan-300">
-                          {formatPercent(ticker.gap_pct)}
-                        </p>
-                      </div>
-
-                      <div className="rounded-xl border border-slate-700 bg-slate-800/70 p-3">
-                        <p className="text-xs text-slate-400">Bucket</p>
-                        <p className="mt-2 text-lg font-medium text-white">{ticker.bucket}</p>
-                        <p className="mt-2 text-sm text-slate-300">
-                          Convergence rate: {bucketStats ? formatPercent(bucketStats.convergence_rate * 100) : "No data"}
-                        </p>
-                        <p className="mt-1 text-sm text-slate-300">
-                          Avg time to converge: {bucketStats ? formatHours(bucketStats.avg_time_to_converge_hours) : "No data"}
-                        </p>
-                        <p className="mt-1 text-sm text-slate-300">
-                          Worst-case tail: {bucketStats ? formatPercent(bucketStats.worst_case_gap_pct) : "No data"}
-                        </p>
-                        {lowConfidence ? (
-                          <p className="mt-2 text-xs text-amber-300">
-                            Low-confidence bucket: sample size {sampleSize} is below the 10-row confidence threshold.
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
-                  </article>
+                    </article>
+                  </Link>
                 );
               })}
             </section>

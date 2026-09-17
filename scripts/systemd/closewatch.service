@@ -1,0 +1,23 @@
+[Unit]
+Description=CloseWatch scheduled ingestion and recalibration
+After=network.target
+
+[Service]
+Type=simple
+# Replace with the user account to run the service as, or remove to run as root
+User=closewatch
+Group=closewatch
+
+# Working directory for the service (project root)
+WorkingDirectory=/path/to/Closecheck
+
+# Use the venv Python executable to run the scheduler command
+# Replace the path below with your virtualenv python, e.g. /home/you/Closecheck/.venv/bin/python
+ExecStart=/path/to/Closecheck/.venv/bin/python -m closewatch.cli scheduler
+
+# Restart on failure
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

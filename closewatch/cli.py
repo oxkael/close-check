@@ -111,6 +111,7 @@ def main() -> None:
         "seed-demo", help="Seed a few demo predictions and recompute calibration stats")
     subparsers.add_parser("api", help="Run the FastAPI server")
     subparsers.add_parser("dashboard", help="Run the Streamlit dashboard")
+    subparsers.add_parser("scheduler", help="Run scheduled ingestion and recalibration")
 
     args = parser.parse_args()
 
@@ -126,6 +127,13 @@ def main() -> None:
         _run_api()
     elif args.command == "dashboard":
         _run_dashboard()
+    elif args.command == "scheduler":
+        try:
+            from .scheduler import run_scheduler
+
+            run_scheduler()
+        except Exception as exc:  # pragma: no cover - runtime helper
+            raise SystemExit(f"Failed to start scheduler: {exc}")
 
 
 if __name__ == "__main__":
