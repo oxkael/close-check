@@ -442,3 +442,58 @@ class Database:
             }
             for row in rows
         ]
+
+    def get_history(self, base_symbol: str, token_symbol: str, limit: int = 200) -> dict:
+        """Return recent real closes for the underlying base symbol and recent token prices for the token symbol.
+
+        Returns a dict with `real_closes` (date, price) and `token_prices` (timestamp, price).
+        """
+        self._ensure_schema()
+        with self._connect() as conn:
+            real_rows = conn.execute(
+                """
+                SELECT close_date, close_price
+                FROM real_closes
+                WHERE symbol = ?
+                ORDER BY close_date DESC
+                LIMIT ?
+                """,
+                (base_symbol.upper(), limit),
+            ).fetchall()
+
+            token_rows = conn.execute(
+                """
+                SELECT timestamp, price
+                FROM token_prices
+                WHERE symbol = ?
+                ORDER BY timestamp DESC
+                LIMIT ?
+                """,
+                (token_symbol.upper(), limit),
+            ).fetchall()
+
+        # Return chronological order (oldest first)
+        real_closes = [
+            {"date": row["close_date"], "price": float(row["close_price"])}
+            for row in reversed(real_rows)
+        ]
+        token_prices = [
+            {"timestamp": row["timestamp"], "price": float(row["price"])}
+            for row in reversed(token_rows)
+        ]
+
+        return {"real_closes": real_closes, "token_prices": token_prices}
+
+    def get_last_recalibrated(self, symbol: Optional[str] = None) -> Optional[str]:
+        """Return the most recent `last_updated` value from calibration_buckets for the given symbol or globally."""
+        self._ensure_schema()
+        with self._connect() as conn:
+            query = "SELECT MAX(last_updated) as last_updated FROM calibration_buckets WHERE 1=1"
+            params: list[str] = []
+            if symbol is not None:
+                query += " AND symbol = ?"
+                params.append(symbol.upper())
+            row = conn.execute(query, params).fetchone()
+            if row is None:
+                return None
+            return row["last_updated"]

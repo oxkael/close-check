@@ -94,10 +94,12 @@ def create_app() -> FastAPI:
     @app.get("/summary")
     def summary() -> dict[str, object]:
         items = [ticker_signal(symbol) for symbol in get_ticker_catalog()]
+        accuracy = db.get_accuracy_summary()
+        accuracy["last_recalibrated"] = db.get_last_recalibrated()
         return {
             "tickers": items,
             "count": len(items),
-            "accuracy_summary": db.get_accuracy_summary(),
+            "accuracy_summary": accuracy,
         }
 
     @app.get("/accuracy/summary")
@@ -118,6 +120,22 @@ def create_app() -> FastAPI:
             "exchange": config["exchange"],
             "bucket": bucket,
             "buckets": buckets,
+        }
+
+    @app.get("/ticker/{symbol}/history")
+    def ticker_history(symbol: str, limit: int = 200) -> dict[str, object]:
+        config_key, config = _lookup_ticker_config(symbol)
+        if config is None:
+            raise HTTPException(status_code=404, detail="Ticker not found")
+
+        resolved_symbol = config_key or _normalize_token_symbol(symbol)
+        base_symbol = config["base_symbol"]
+        hist = db.get_history(base_symbol=base_symbol, token_symbol=resolved_symbol, limit=limit)
+        return {
+            "symbol": resolved_symbol,
+            "base_symbol": base_symbol,
+            "exchange": config["exchange"],
+            "history": hist,
         }
 
     @app.post("/admin/recompute-calibration")
@@ -152,6 +170,16 @@ def create_app() -> FastAPI:
             exchange=config["exchange"],
             market_closed=closed,
         )
+        # Add underlying name for UI consumption (human-friendly)
+        underlying_map = {
+            "TSLA": "Tesla, Inc.",
+            "NVDA": "NVIDIA Corporation",
+            "AAPL": "Apple Inc.",
+            "MSFT": "Microsoft Corporation",
+            "AMZN": "Amazon.com, Inc.",
+        }
+        base = config.get("base_symbol")
+        gap_signal["underlying_name"] = underlying_map.get(base, base)
         if not closed:
             db.resolve_pending_predictions(
                 symbol=resolved_symbol,
@@ -177,8 +205,9 @@ def create_app() -> FastAPI:
             "worst_case_gap_pct": None,
             "last_updated": None,
         }
-        gap_signal["accuracy_summary"] = db.get_accuracy_summary(
-            resolved_symbol)
+        accuracy_summary = db.get_accuracy_summary(resolved_symbol)
+        accuracy_summary["last_recalibrated"] = db.get_last_recalibrated(resolved_symbol)
+        gap_signal["accuracy_summary"] = accuracy_summary
         return gap_signal
 
     return app

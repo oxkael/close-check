@@ -7,6 +7,7 @@ type AccuracySummary = {
   resolved_predictions: number;
   converged: number;
   accuracy_pct: number;
+  last_recalibrated?: string | null;
 };
 
 type BucketStats = {
@@ -37,11 +38,20 @@ type SummaryResponse = {
   accuracy_summary: AccuracySummary;
 };
 
+// value is a fraction already expressed as a percent (e.g. 5.0 for 5%)
 const formatPercent = (value: number | null | undefined) => {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return "No data";
   }
   return `${value.toFixed(2)}%`;
+};
+
+// value is a fractional ratio (0.05 => 5%). Use this for convergence_rate fields.
+const formatRatioAsPercent = (value: number | null | undefined) => {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "No data";
+  }
+  return `${(value * 100).toFixed(2)}%`;
 };
 
 const formatHours = (value: number | null | undefined) => {
@@ -139,6 +149,9 @@ export default function Home() {
                 <p className="mt-3 text-3xl font-semibold text-cyan-400">
                   {topAccuracy.resolved_predictions}
                 </p>
+                <p className="mt-2 text-xs text-slate-400">
+                  Last recalibrated: {topAccuracy.last_recalibrated ? new Date(topAccuracy.last_recalibrated).toLocaleString() : "No data"}
+                </p>
               </div>
             </section>
 
@@ -156,6 +169,7 @@ export default function Home() {
                             {ticker.exchange}
                           </p>
                           <h2 id={`ticker-${idx}-title`} className="mt-1 text-2xl font-semibold text-white">{ticker.symbol}</h2>
+                          <p className="mt-1 text-sm text-slate-300">{(ticker as any).underlying_name ?? ''}</p>
                         </div>
                         <span
                           className={`rounded-full px-3 py-1 text-xs font-medium ${
@@ -195,7 +209,7 @@ export default function Home() {
                           <p className="text-xs text-slate-400">Bucket</p>
                           <p className="mt-2 text-lg font-medium text-white">{ticker.bucket}</p>
                           <p className="mt-2 text-sm text-slate-300">
-                            Convergence rate: {bucketStats ? formatPercent(bucketStats.convergence_rate * 100) : "No data"}
+                            Convergence rate: {bucketStats ? formatRatioAsPercent(bucketStats.convergence_rate) : "No data"}
                           </p>
                           <p className="mt-1 text-sm text-slate-300">
                             Avg time to converge: {bucketStats ? formatHours(bucketStats.avg_time_to_converge_hours) : "No data"}

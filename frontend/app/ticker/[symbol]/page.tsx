@@ -18,10 +18,12 @@ type AccuracySummary = {
     resolved_predictions: number;
     converged: number;
     accuracy_pct: number;
+    last_recalibrated?: string | null;
 };
 
 type Signal = {
     symbol: string;
+    underlying_name?: string;
     exchange: string;
     market_closed: boolean;
     last_real_close: number;
@@ -32,11 +34,19 @@ type Signal = {
     accuracy_summary: AccuracySummary;
 };
 
+type HistoryResponse = {
+    history: {
+        real_closes: Array<{ date: string; price: number }>;
+        token_prices: Array<{ timestamp: string; price: number }>;
+    };
+};
+
 export default function TickerPage() {
     const params = useParams() as { symbol?: string };
     const symbol = params?.symbol ?? "";
 
     const [signal, setSignal] = useState<Signal | null>(null);
+    const [history, setHistory] = useState<HistoryResponse | null>(null);
     const [calibration, setCalibration] = useState<BucketStats[] | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -61,6 +71,12 @@ export default function TickerPage() {
                 if (r2.ok) {
                     const cal = await r2.json();
                     if (!cancelled) setCalibration(cal.buckets ?? []);
+                }
+
+                const r3 = await fetch(`/api/ticker/${symbol}/history`);
+                if (r3.ok) {
+                    const hist = await r3.json();
+                    if (!cancelled) setHistory(hist);
                 }
                 setError(null);
             } catch (err) {
@@ -89,7 +105,9 @@ export default function TickerPage() {
         <main className="min-h-screen p-6" role="main" aria-busy={loading}>
             <div className="mx-auto max-w-4xl">
                 <header className="mb-6">
-                    <h1 className="text-3xl font-semibold">{symbol} — Detail</h1>
+                    <p className="text-xs uppercase tracking-[0.2em] text-cyan-400">CloseWatch</p>
+                    <h1 className="mt-2 text-3xl font-semibold">{signal?.underlying_name ?? symbol}</h1>
+                    <p className="mt-1 text-sm text-slate-400">{symbol}</p>
                 </header>
 
                 {loading ? (
@@ -168,10 +186,18 @@ export default function TickerPage() {
                         <div className="rounded-xl border p-4">
                             <h3 className="text-lg font-medium">Gap trend</h3>
                             <div className="mt-3">
-                                {/* Simple sparkline using last_real_close and current token_price as sample
-                                        Render only when both values are present to avoid displaying fake zeros. */}
-                                {signal.last_real_close != null && signal.token_price != null ? (
-                                    <Sparkline values={[signal.last_real_close, signal.token_price]} width={480} height={80} stroke="#06b6d4" />
+                                {history && history.history && (history.history.real_closes.length > 0 || history.history.token_prices.length > 0) ? (
+                                    (() => {
+                                        const trendValues = [
+                                            ...history.history.real_closes.map((entry) => entry.price),
+                                            ...history.history.token_prices.map((entry) => entry.price),
+                                        ];
+                                        return trendValues.length > 1 ? (
+                                            <Sparkline values={trendValues} width={480} height={80} stroke="#06b6d4" />
+                                        ) : (
+                                            <div className="text-sm text-slate-400">No trend available — insufficient data.</div>
+                                        );
+                                    })()
                                 ) : (
                                     <div className="text-sm text-slate-400">No trend available — insufficient data.</div>
                                 )}
@@ -184,6 +210,7 @@ export default function TickerPage() {
                                 <div>Resolved: {signal.accuracy_summary.resolved_predictions}</div>
                                 <div>Converged: {signal.accuracy_summary.converged}</div>
                                 <div>Accuracy: {signal.accuracy_summary.accuracy_pct.toFixed(2)}%</div>
+                                <div>Last recalibrated: {signal.accuracy_summary.last_recalibrated ? new Date(signal.accuracy_summary.last_recalibrated).toLocaleString() : "No data"}</div>
                             </div>
                         </div>
 
