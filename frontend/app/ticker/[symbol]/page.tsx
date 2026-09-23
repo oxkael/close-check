@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import Sparkline from "../../../components/Sparkline";
 
@@ -102,12 +103,17 @@ export default function TickerPage() {
     if (!symbol) return <div className="p-6">Missing symbol</div>;
 
     return (
-        <main className="min-h-screen p-6" role="main" aria-busy={loading}>
-            <div className="mx-auto max-w-4xl">
-                <header className="mb-6">
-                    <p className="text-xs uppercase tracking-[0.2em] text-cyan-400">CloseWatch</p>
-                    <h1 className="mt-2 text-3xl font-semibold">{signal?.underlying_name ?? symbol}</h1>
-                    <p className="mt-1 text-sm text-slate-400">{symbol}</p>
+        <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(148,163,184,0.14),_transparent_24%),linear-gradient(180deg,_#020817_0%,_#0f172a_100%)] p-6 text-slate-100" role="main" aria-busy={loading}>
+            <div className="mx-auto max-w-5xl">
+                <header className="mb-6 flex items-start justify-between gap-4 border-b border-slate-800/80 pb-5">
+                    <div>
+                        <p className="text-[11px] uppercase tracking-[0.25em] text-slate-400">CloseWatch</p>
+                        <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-white">{signal?.underlying_name ?? symbol}</h1>
+                        <p className="mt-1 text-sm text-slate-400">{symbol}</p>
+                    </div>
+                    <Link href="/" className="rounded-full border border-slate-700 bg-slate-900/80 px-3.5 py-2 text-sm text-slate-200 transition hover:border-slate-500 hover:text-white">
+                        Back to dashboard
+                    </Link>
                 </header>
 
                 {loading ? (
@@ -139,53 +145,67 @@ export default function TickerPage() {
                     </div>
                 ) : signal ? (
                     <section className="space-y-6">
-                        <div className="rounded-xl border p-4">
-                            <div className="flex items-center justify-between">
+                        <div className="rounded-2xl border border-slate-800/80 bg-slate-900/80 p-4 shadow-xl shadow-slate-950/20 backdrop-blur-sm">
+                            <div className="flex items-center justify-between gap-4">
                                 <div>
-                                    <div className="text-sm text-slate-400">Exchange</div>
-                                    <div className="text-lg font-medium">{signal.exchange}</div>
+                                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Exchange</div>
+                                    <div className="mt-1 text-lg font-medium text-white">{signal.exchange}</div>
                                 </div>
-                                <div>
-                                    <div className="text-sm text-slate-400">Market</div>
-                                    <div className="text-lg">{signal.market_closed ? "Closed" : "Open"}</div>
+                                <div className="text-right">
+                                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Market</div>
+                                    <div className={`mt-1 text-lg font-medium ${signal.market_closed ? "text-amber-300" : "text-emerald-300"}`}>
+                                        {signal.market_closed ? "Closed" : "Open"}
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="rounded-xl border p-4">
-                                <div className="text-sm text-slate-400">Last real close</div>
-                                <div className="mt-2 text-xl font-semibold">${signal.last_real_close.toFixed(2)}</div>
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div className="rounded-2xl border border-slate-800/80 bg-slate-900/80 p-4 shadow-lg shadow-slate-950/20">
+                                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Last real close</div>
+                                <div className="mt-2 text-xl font-semibold text-white">${signal.last_real_close.toFixed(2)}</div>
                             </div>
-                            <div className="rounded-xl border p-4">
-                                <div className="text-sm text-slate-400">Token price</div>
-                                <div className="mt-2 text-xl font-semibold">${signal.token_price.toFixed(2)}</div>
+                            <div className="rounded-2xl border border-slate-800/80 bg-slate-900/80 p-4 shadow-lg shadow-slate-950/20">
+                                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Token price</div>
+                                <div className="mt-2 text-xl font-semibold text-white">${signal.token_price.toFixed(2)}</div>
                             </div>
                         </div>
 
-                        <div className="rounded-xl border p-4">
-                            <div className="text-sm text-slate-400">Current gap</div>
-                            <div className="mt-2 text-2xl font-semibold">{signal.gap_pct.toFixed(2)}%</div>
-                            <div className="mt-2 text-sm">Bucket: {signal.bucket}</div>
+                        <div className="rounded-2xl border border-slate-600/80 bg-slate-800/80 p-4 shadow-lg shadow-slate-950/10">
+                            <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Current gap</div>
+                            <div className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-white">{signal.gap_pct.toFixed(2)}%</div>
+                            <div className="mt-2 text-sm text-slate-300">Bucket: {signal.bucket}</div>
                         </div>
 
-                        <div className="rounded-xl border p-4">
-                            <h3 className="text-lg font-medium">Bucket stats</h3>
-                            {signal.bucket_stats ? (
-                                <div className="mt-3 space-y-2 text-sm">
-                                    <div>Sample size: {signal.bucket_stats.sample_size}</div>
-                                    <div>Convergence rate: {(signal.bucket_stats.convergence_rate * 100).toFixed(1)}%</div>
-                                    <div>Avg time to converge: {signal.bucket_stats.avg_time_to_converge_hours ?? "No data"}h</div>
-                                    <div>Worst-case gap: {signal.bucket_stats.worst_case_gap_pct ?? "No data"}%</div>
+                        <div className="grid gap-6 lg:grid-cols-2">
+                            <div className="rounded-2xl border border-slate-800/80 bg-slate-900/80 p-4 shadow-xl shadow-slate-950/20">
+                                <h3 className="text-lg font-medium text-white">Bucket stats</h3>
+                                {signal.bucket_stats ? (
+                                    <div className="mt-3 space-y-2 text-sm text-slate-300">
+                                        <div>Sample size: <span className="text-white">{signal.bucket_stats.sample_size}</span></div>
+                                        <div>Convergence rate: <span className="text-white">{(signal.bucket_stats.convergence_rate * 100).toFixed(1)}%</span></div>
+                                        <div>Avg time to converge: <span className="text-white">{signal.bucket_stats.avg_time_to_converge_hours ?? "No data"}h</span></div>
+                                        <div>Worst-case gap: <span className="text-white">{signal.bucket_stats.worst_case_gap_pct ?? "No data"}%</span></div>
+                                    </div>
+                                ) : (
+                                    <div className="mt-3 text-sm text-slate-400">No data for this bucket yet.</div>
+                                )}
+                            </div>
+
+                            <div className="rounded-2xl border border-slate-800/80 bg-slate-900/80 p-4 shadow-xl shadow-slate-950/20">
+                                <h3 className="text-lg font-medium text-white">Accuracy summary</h3>
+                                <div className="mt-3 space-y-2 text-sm text-slate-300">
+                                    <div>Resolved: <span className="text-white">{signal.accuracy_summary.resolved_predictions}</span></div>
+                                    <div>Converged: <span className="text-white">{signal.accuracy_summary.converged}</span></div>
+                                    <div>Accuracy: <span className="text-white">{signal.accuracy_summary.accuracy_pct.toFixed(2)}%</span></div>
+                                    <div>Last recalibrated: <span className="text-white">{signal.accuracy_summary.last_recalibrated ? new Date(signal.accuracy_summary.last_recalibrated).toLocaleString() : "No data"}</span></div>
                                 </div>
-                            ) : (
-                                <div className="mt-3 text-sm">No data for this bucket yet.</div>
-                            )}
+                            </div>
                         </div>
 
-                        <div className="rounded-xl border p-4">
-                            <h3 className="text-lg font-medium">Gap trend</h3>
-                            <div className="mt-3">
+                        <div className="rounded-2xl border border-slate-800/80 bg-slate-900/80 p-4 shadow-xl shadow-slate-950/20">
+                            <h3 className="text-lg font-medium text-white">Gap trend</h3>
+                            <div className="mt-3 overflow-hidden rounded-xl border border-slate-800 bg-slate-950/60 p-2">
                                 {history && history.history && (history.history.real_closes.length > 0 || history.history.token_prices.length > 0) ? (
                                     (() => {
                                         const trendValues = [
@@ -204,27 +224,17 @@ export default function TickerPage() {
                             </div>
                         </div>
 
-                        <div className="rounded-xl border p-4">
-                            <h3 className="text-lg font-medium">Accuracy summary</h3>
-                            <div className="mt-3 text-sm">
-                                <div>Resolved: {signal.accuracy_summary.resolved_predictions}</div>
-                                <div>Converged: {signal.accuracy_summary.converged}</div>
-                                <div>Accuracy: {signal.accuracy_summary.accuracy_pct.toFixed(2)}%</div>
-                                <div>Last recalibrated: {signal.accuracy_summary.last_recalibrated ? new Date(signal.accuracy_summary.last_recalibrated).toLocaleString() : "No data"}</div>
-                            </div>
-                        </div>
-
                         {calibration ? (
-                            <div className="rounded-xl border p-4">
-                                <h3 className="text-lg font-medium">All buckets (sample)</h3>
+                            <div className="rounded-2xl border border-slate-800/80 bg-slate-900/80 p-4 shadow-xl shadow-slate-950/20">
+                                <h3 className="text-lg font-medium text-white">All buckets (sample)</h3>
                                 <div className="mt-3 grid gap-2">
                                     {calibration.map((b) => (
-                                        <div key={b.bucket} className="rounded-md border p-2 text-sm">
-                                            <div className="flex justify-between">
-                                                <div>{b.bucket}</div>
+                                        <div key={b.bucket} className="rounded-xl border border-slate-700 bg-slate-800/70 p-3 text-sm text-slate-300">
+                                            <div className="flex justify-between gap-3">
+                                                <div className="font-medium text-white">{b.bucket}</div>
                                                 <div>n={b.sample_size}</div>
                                             </div>
-                                            <div className="text-xs">conv {Math.round((b.convergence_rate ?? 0) * 100)}% • avg {b.avg_time_to_converge_hours ?? "-"}h</div>
+                                            <div className="mt-1 text-xs text-slate-400">conv {Math.round((b.convergence_rate ?? 0) * 100)}% • avg {b.avg_time_to_converge_hours ?? "-"}h</div>
                                         </div>
                                     ))}
                                 </div>
